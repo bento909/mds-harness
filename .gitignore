@@ -1,0 +1,26 @@
+# build artifacts
+/build/
+/out/
+*.obj
+*.o
+*.exe
+*.dll
+*.pdb
+*.ilk
+
+# CMake
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+
+# rendered test output
+*.wav
+/renders/
+
+# editor/OS cruft
+.vs/
+.vscode/
+*.user
+.DS_Store
+Thumbs.db
