@@ -6,7 +6,8 @@ core (the same interpreter that backs `mds-tools`' certifier/disassembler)
 and render or play it, without needing real hardware or a full
 build→certify→flash→listen round trip.
 
-### Shout outs to gearmulator for the 56300 emulator, kitbasher for toolchain stuff, waftlord and murdenihcam for input and inspiration, MDX20 developers for this entire experience, not to mention Elektron and Commodore and the giants on whose shoulders we aspire to stand
+### Shout outs 
+gearmulator for the 56300 emulator, kitbasher for toolchain stuff, waftlord and murdenihcam for input and inspiration, MDX20 developers for this entire experience, not to mention Elektron and Commodore and the giants on whose shoulders we aspire to stand
 
 ## System requirements and assumptions
 
