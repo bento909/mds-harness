@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>mds-harness</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <header class="rack-header">
+    <div class="nameplate">
+      <span class="nameplate-mark">MDS</span><span class="nameplate-mark accent">HARNESS</span>
+    </div>
+    <div class="machine-picker">
+      <label for="machine-select">MACHINE</label>
+      <select id="machine-select"></select>
+    </div>
+  </header>
+
+  <main class="panel" id="knob-panel">
+    <p class="empty-state">Loading machine list&hellip;</p>
+  </main>
+
+  <section class="neighbour-bay" id="neighbour-bay" hidden>
+    <h2>Neighbour input <span class="neighbour-hint">(simulated "tracks back" signal for NFX/neighbour machines)</span></h2>
+    <div class="neighbour-slot" data-which="far">
+      <span class="neighbour-label">FAR <small>(two tracks back)</small></span>
+      <span class="neighbour-current" data-role="current">default (low&rarr;mid&rarr;high)</span>
+      <label class="neighbour-upload">
+        choose WAV&hellip;
+        <input type="file" accept="audio/wav,.wav" data-role="file" />
+      </label>
+      <button type="button" class="neighbour-reset" data-role="reset">use default</button>
+    </div>
+    <div class="neighbour-slot" data-which="near">
+      <span class="neighbour-label">NEAR <small>(one track back)</small></span>
+      <span class="neighbour-current" data-role="current">default (high&rarr;mid&rarr;low)</span>
+      <label class="neighbour-upload">
+        choose WAV&hellip;
+        <input type="file" accept="audio/wav,.wav" data-role="file" />
+      </label>
+      <button type="button" class="neighbour-reset" data-role="reset">use default</button>
+    </div>
+  </section>
+
+  <section class="sequencer" id="sequencer">
+    <h2>Trig pattern <span class="sequencer-hint">(16 steps/bar, repeats across BARS -- click a pad to toggle it, press its key to plock the current knobs into it, double-tap the key to clear its plocks)</span></h2>
+    <div class="step-grid" id="step-grid"></div>
+  </section>
+
+  <footer class="transport">
+    <label class="field">
+      <span>BARS</span>
+      <input type="number" id="bars" value="1" min="1" max="64" step="1" />
+    </label>
+    <label class="field">
+      <span>BPM</span>
+      <input type="number" id="bpm" value="120" min="20" max="300" />
+    </label>
+    <button id="render-btn" class="render-btn">RENDER &amp; PLAY</button>
+    <audio id="player" controls></audio>
+    <label class="field checkbox-field" title="Also writes the render to renders/last_render.wav (with its knob values/trig pattern embedded as metadata) for later inspection -- off by default, renders normally stay temporary">
+      <input type="checkbox" id="save-render" />
+      <span>SAVE RENDER</span>
+    </label>
+    <span class="transport-divider"></span>
+    <button id="export-btn" class="render-btn export-btn" title="Runs the full toolchain (assemble, certify, sysex-encode) and downloads a real, installable .syx with the current knob values baked in as defaults -- installs to slot 1, change the destination slot later at install time">EXPORT .SYX</button>
+    <span id="status" class="status"></span>
+  </footer>
+
+  <script src="/app.js"></script>
+</body>
+</html>

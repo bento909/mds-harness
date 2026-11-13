@@ -1,0 +1,479 @@
+:root {
+  /* A physical hardware panel, not a document -- committed to one look
+     on purpose (glowing red LCD + brushed black steel), not a
+     light/dark toggle. Every color is still a named token (never a
+     literal in a component rule below) so the look stays coherent if
+     it's ever retuned. */
+  --bg: #040404;
+  --panel: #101010;
+  --panel-raised: #1a1a1a;
+  --panel-border: #333333;
+  --steel-sheen: rgba(255, 255, 255, 0.035);
+  --text: #d9cfc8;
+  --text-dim: #6e6360;
+  --accent: #ff1a2b;        /* glowing red -- lit LEDs, pointers, active chrome */
+  --accent-dim: #5c0f16;
+  --readout: #ff3b4a;       /* red LCD digit glow */
+  --readout-bg: #140505;
+  --danger: #ffb300;        /* amber -- deliberately NOT red, so an error never
+                                reads as just another lit/active element */
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: "Press Start 2P", "IBM Plex Mono", monospace;
+  overflow-x: hidden;
+}
+
+body {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  /* Brushed-steel sheen across the whole chassis -- fine diagonal
+     streaks, barely-there, so it reads as machined metal rather than a
+     flat fill without fighting any text sitting on top of it. */
+  background-image: repeating-linear-gradient(
+    97deg,
+    var(--steel-sheen) 0px, var(--steel-sheen) 1px,
+    transparent 1px, transparent 4px
+  );
+}
+
+/* Reusable LCD-screen texture: a dark red-black well with faint
+   scanlines, used for every "glowing readout" surface (knob values,
+   status, neighbour-current). Declared once, applied via .lcd. */
+.lcd {
+  background-color: var(--readout-bg);
+  background-image: repeating-linear-gradient(
+    to bottom,
+    rgba(255, 59, 74, 0.07) 0px, rgba(255, 59, 74, 0.07) 1px,
+    transparent 1px, transparent 3px
+  );
+  color: var(--readout);
+  text-shadow: 0 0 2px var(--readout), 0 0 6px rgba(255, 59, 74, 0.6);
+}
+
+.rack-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1.5rem;
+  padding: 1.25rem 1.75rem 1rem;
+  border-bottom: 1px solid var(--panel-border);
+  flex-wrap: wrap;
+}
+
+.nameplate {
+  font-size: 1.3rem;
+  line-height: 1.4;
+  letter-spacing: 0.03em;
+  text-wrap: balance;
+}
+.nameplate-mark.accent {
+  color: var(--accent);
+  text-shadow: 0 0 3px var(--accent), 0 0 10px rgba(255, 26, 43, 0.7);
+}
+
+.machine-picker {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+.machine-picker label {
+  font-size: 0.6rem;
+  color: var(--text-dim);
+}
+#machine-select {
+  background: var(--panel-raised);
+  color: var(--text);
+  border: 2px solid var(--panel-border);
+  border-radius: 0;
+  padding: 0.5rem 0.6rem;
+  font-family: inherit;
+  font-size: 0.6rem;
+  max-width: min(60vw, 32rem);
+}
+#machine-select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Exactly two shapes, never an awkward in-between column count: 2 rows
+   of 4 by default, 1 row of 8 once the window is wide enough to fit it
+   comfortably (8 modules x ~9rem + 7 gaps x 1.25rem ~= 81rem). */
+.panel {
+  flex: 1;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1.25rem;
+  padding: 1.75rem;
+  overflow-x: auto;
+  align-content: start;
+}
+@media (min-width: 82rem) {
+  .panel { grid-template-columns: repeat(8, minmax(0, 1fr)); }
+}
+
+.empty-state {
+  color: var(--text-dim);
+  font-size: 0.65rem;
+  line-height: 1.6;
+}
+
+.knob-module {
+  background-color: var(--panel);
+  background-image: repeating-linear-gradient(
+    97deg,
+    var(--steel-sheen) 0px, var(--steel-sheen) 1px,
+    transparent 1px, transparent 4px
+  );
+  border: 2px solid var(--panel-border);
+  border-radius: 0;
+  padding: 1rem 0.6rem 1.1rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.knob-name {
+  font-size: 0.6rem;
+  letter-spacing: 0.04em;
+}
+
+.knob-dial {
+  width: 5.5rem;
+  height: 5.5rem;
+  border-radius: 50%;
+  /* Brushed-steel pot: a metallic radial gradient (not a flat panel
+     color) so the physical control itself reads as machined metal,
+     distinct from the flat chassis panels around it. */
+  background:
+    radial-gradient(circle at 32% 28%, rgba(255,255,255,0.18), transparent 38%),
+    conic-gradient(from 0deg, #2a2a2a, #3c3c3c, #1c1c1c, #343434, #222222, #2a2a2a);
+  border: 2px solid #050505;
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.06), 0 1px 0 rgba(0,0,0,0.6);
+  position: relative;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+.knob-dial:active { cursor: grabbing; }
+.knob-dial:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* Persistent ring for "off its own default" -- a box-shadow, not the
+   outline property, so it never collides with or gets mistaken for the
+   focus-visible outline above (focus comes and goes with one element at
+   a time; this stays on every off-default knob regardless of focus). */
+.knob-dial.off-default {
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.06), 0 1px 0 rgba(0,0,0,0.6),
+              0 0 0 2px var(--accent), 0 0 8px 1px rgba(255, 26, 43, 0.8);
+}
+
+/* Pointer grows UPWARD from the dial's center, pivoting at that center
+   (transform-origin: bottom) -- at rotate(0deg) it points to 12 o'clock
+   (the midpoint), sweeping to ~7-8 o'clock at min and ~4-5 o'clock at
+   max, same convention as a real synth pot's dead-zone-at-the-bottom. */
+.knob-pointer {
+  position: absolute;
+  left: 50%;
+  top: 8%;
+  width: 2px;
+  height: 42%;
+  background: var(--accent);
+  box-shadow: 0 0 3px var(--accent), 0 0 7px rgba(255, 26, 43, 0.9);
+  transform-origin: bottom center;
+  transform: translateX(-50%) rotate(0deg);
+  z-index: 2;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .knob-pointer { transition: transform 60ms linear; }
+}
+
+/* Tick marks: same pivot-at-center geometry as the pointer, but only the
+   outer ~38% of the radius is visible (a gradient mask), so they read as
+   short marks near the rim rather than full spokes. */
+.knob-tick {
+  position: absolute;
+  left: 50%;
+  top: 8%;
+  width: 1px;
+  height: 42%;
+  transform-origin: bottom center;
+  background: linear-gradient(to top, transparent 0%, transparent 62%, #000 62%, #000 100%);
+  opacity: 0.55;
+}
+.knob-tick.min { transform: translateX(-50%) rotate(-135deg); }
+.knob-tick.mid {
+  transform: translateX(-50%) rotate(0deg);
+  background: linear-gradient(to top, transparent 0%, transparent 62%, var(--accent-dim) 62%, var(--accent-dim) 100%);
+  opacity: 1;
+}
+.knob-tick.max { transform: translateX(-50%) rotate(135deg); }
+
+.knob-end-label {
+  position: absolute;
+  font-size: 0.5rem;
+  color: var(--text-dim);
+  bottom: -0.2rem;
+}
+.knob-end-label.min { left: -0.5rem; }
+.knob-end-label.max { right: -0.5rem; }
+
+.knob-readout {
+  font-size: 0.75rem;
+  border-radius: 0;
+  padding: 0.25rem 0.5rem;
+  min-width: 2.8rem;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.knob-value-input {
+  width: 3.6rem;
+  border: 2px solid var(--panel-border);
+  border-radius: 0;
+  font-family: inherit;
+  font-size: 0.65rem;
+  text-align: center;
+  padding: 0.2rem 0.1rem;
+}
+.knob-value-input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+.knob-reset {
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  font-family: inherit;
+  font-size: 0.5rem;
+  cursor: pointer;
+  padding: 0;
+}
+.knob-reset:hover { color: var(--accent); text-shadow: 0 0 4px var(--accent); }
+.knob-reset:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.neighbour-bay {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1.5rem;
+  padding: 0.9rem 1.75rem;
+  border-top: 1px solid var(--panel-border);
+  background: var(--panel);
+}
+.neighbour-bay h2 {
+  margin: 0;
+  flex: 1 0 100%;
+  font-size: 0.65rem;
+  color: var(--text-dim);
+}
+.neighbour-hint {
+  font-size: 0.55rem;
+  display: inline-block;
+  margin-top: 0.3rem;
+}
+.neighbour-slot {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 0.55rem;
+}
+.neighbour-label {
+  color: var(--text);
+}
+.neighbour-label small { color: var(--text-dim); }
+.neighbour-current {
+  font-size: 0.55rem;
+  border-radius: 0;
+  padding: 0.3rem 0.5rem;
+  max-width: 14rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.neighbour-upload {
+  position: relative;
+  background: var(--panel-raised);
+  color: var(--text);
+  border: 2px solid var(--panel-border);
+  border-radius: 0;
+  padding: 0.4rem 0.6rem;
+  font-size: 0.55rem;
+  cursor: pointer;
+}
+.neighbour-upload:hover { border-color: var(--accent); }
+.neighbour-upload input[type="file"] {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.neighbour-reset {
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  font-family: inherit;
+  font-size: 0.5rem;
+  cursor: pointer;
+  padding: 0;
+}
+.neighbour-reset:hover { color: var(--accent); text-shadow: 0 0 4px var(--accent); }
+
+.sequencer {
+  padding: 1rem 1.75rem;
+  border-top: 1px solid var(--panel-border);
+  background: var(--panel);
+}
+.sequencer h2 {
+  margin: 0 0 0.8rem;
+  font-size: 0.65rem;
+  color: var(--text-dim);
+}
+.sequencer-hint {
+  font-size: 0.5rem;
+  display: block;
+  margin-top: 0.3rem;
+  line-height: 1.6;
+}
+.step-grid {
+  display: grid;
+  grid-template-columns: repeat(16, minmax(1.8rem, 2.6rem));
+  gap: 0.4rem;
+}
+.step-pad {
+  aspect-ratio: 1;
+  border-radius: 0;
+  border: 2px solid var(--panel-border);
+  background-color: var(--panel-raised);
+  background-image: repeating-linear-gradient(
+    97deg,
+    var(--steel-sheen) 0px, var(--steel-sheen) 1px,
+    transparent 1px, transparent 4px
+  );
+  cursor: pointer;
+  position: relative;
+  padding: 0;
+}
+.step-pad:hover { border-color: var(--accent); }
+.step-pad:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.step-pad.on {
+  background: var(--accent);
+  border-color: var(--accent);
+  box-shadow: 0 0 6px var(--accent), 0 0 16px rgba(255, 26, 43, 0.65);
+}
+/* Every 4th step gets a slightly brighter rest-state border, marking
+   beat boundaries in a 4/4 bar -- same convention real step sequencers
+   use so the grid reads as 4 groups of 4, not 16 undifferentiated
+   buttons. */
+.step-pad:nth-child(4n+1):not(.on) { border-color: var(--text-dim); }
+
+/* The plock key letter is the pad's whole identity now -- big, bold,
+   dead center. Color-coded in groups of 4 (the same grouping the
+   border-brightening rule above already marks) so the 16-step row
+   reads at a glance as 4 bars of 4, not 16 identical buttons: steps
+   1-4 red, 5-8 orange, 9-12 yellow, 13-16 red again. */
+.step-pad-key {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.15rem;
+  font-weight: bold;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+.step-pad:nth-child(-n+4) .step-pad-key { color: #ff1a2b; text-shadow: 0 0 6px #ff1a2b; }
+.step-pad:nth-child(n+5):nth-child(-n+8) .step-pad-key { color: #ff8a1a; text-shadow: 0 0 6px #ff8a1a; }
+.step-pad:nth-child(n+9):nth-child(-n+12) .step-pad-key { color: #ffd41a; text-shadow: 0 0 6px #ffd41a; }
+.step-pad:nth-child(n+13):nth-child(-n+16) .step-pad-key { color: #ffffff; text-shadow: 0 0 6px #ffffff; }
+/* Bold, dark, and unglowing once the pad itself is lit solid red --
+   the group color above is for the dark resting state only; legibility
+   against the now-solid-accent background takes priority over the
+   group-color scheme while a step is on. */
+.step-pad.on .step-pad-key { color: #1a0000; text-shadow: none; }
+/* A step carrying at least one plock gets a small dot, independent of
+   on/off state and color, so it reads at a glance even on an active
+   (already-accent-colored) pad. */
+.step-pad.has-plock::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 6px;
+  height: 6px;
+  background: var(--readout);
+  box-shadow: 0 0 4px var(--readout), 0 0 0 1px var(--panel);
+}
+
+.transport {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+  padding: 1rem 1.75rem;
+  border-top: 1px solid var(--panel-border);
+  background: var(--panel);
+  flex-wrap: wrap;
+}
+
+.field {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.55rem;
+  color: var(--text-dim);
+}
+.field input {
+  width: 4.8rem;
+  background: var(--readout-bg);
+  background-image: repeating-linear-gradient(
+    to bottom,
+    rgba(255, 59, 74, 0.07) 0px, rgba(255, 59, 74, 0.07) 1px,
+    transparent 1px, transparent 3px
+  );
+  color: var(--readout);
+  text-shadow: 0 0 2px var(--readout);
+  border: 2px solid var(--panel-border);
+  border-radius: 0;
+  padding: 0.4rem 0.5rem;
+  font-family: inherit;
+  font-size: 0.6rem;
+}
+
+.checkbox-field {
+  cursor: pointer;
+}
+.checkbox-field input {
+  width: auto;
+  accent-color: var(--accent);
+}
+
+.transport-divider {
+  width: 1px;
+  height: 1.8rem;
+  background: var(--panel-border);
+}
+
+.render-btn {
+  background: var(--accent);
+  color: #1a0000;
+  border: none;
+  border-radius: 0;
+  padding: 0.7rem 1.1rem;
+  font-family: inherit;
+  font-size: 0.65rem;
+  cursor: pointer;
+  box-shadow: 0 0 8px rgba(255, 26, 43, 0.65);
+}
+.render-btn:hover { background: var(--readout); box-shadow: 0 0 14px rgba(255, 26, 43, 0.9); }
+.render-btn:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
+.render-btn:disabled { background: var(--accent-dim); cursor: wait; color: var(--text-dim); box-shadow: none; }
+
+#player { height: 2.2rem; }
+
+.status {
+  font-size: 0.55rem;
+  color: var(--text-dim);
+  line-height: 1.6;
+}
+.status.error { color: var(--danger); text-shadow: 0 0 4px rgba(255, 179, 0, 0.6); }

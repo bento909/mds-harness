@@ -7,6 +7,13 @@
 *.dll
 *.pdb
 *.ilk
+# ...except the vendored native tools under vendor/ -- real tracked
+# assets (the DSP56300 assembler and certifier), not build output.
+!vendor/**/*.exe
+
+# per-machine local config (e.g. a detected/entered MinGW path) --
+# never something to commit, it's specific to whoever ran this
+.mds-harness-config.json
 
 # CMake
 CMakeFiles/
@@ -17,6 +24,13 @@ Makefile
 # rendered test output
 *.wav
 /renders/
+# ...except the bundled default neighbour-input assets -- real tracked
+# assets (see tools/serve.py's DEFAULT_NEIGHBOUR_FAR/NEAR), not render output.
+!tools/assets/*.wav
+
+# Python bytecode cache (vendor/ ships source, not build artifacts)
+__pycache__/
+*.pyc
 
 # editor/OS cruft
 .vs/
