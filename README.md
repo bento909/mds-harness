@@ -6,8 +6,23 @@ core (the same interpreter that backs `mds-tools`' certifier/disassembler)
 and render or play it, without needing real hardware or a full
 build→certify→flash→listen round trip.
 
-### Shout outs 
-gearmulator for the 56300 emulator, kitbasher for toolchain stuff, waftlord and murdenihcam for input and inspiration, MDX20 developers for this entire experience, not to mention Elektron and Commodore and the giants on whose shoulders we aspire to stand
+## TL;DR
+
+One-time build, then `python tools/serve.py` from wherever your
+machines live. Everything below is a link into "What you can do with
+it" further down, simple to advanced:
+
+| I want to... | Do this |
+|---|---|
+| [Just listen to a machine](#1-listen-to-a-machine-thats-already-built) | Pick it from the dropdown, click RENDER & PLAY. |
+| [Explore its sound](#2-explore-a-machines-sound-by-turning-its-knobs) | Turn knobs, click RENDER & PLAY again. |
+| [Program a beat](#3-program-a-trig-pattern-the-sequencer) | Click step pads in the 16-step row to toggle them. |
+| [Lock a parameter to one step](#4-lock-individual-parameters-to-a-specific-step-plocks) | Dial the knobs you want, press that step's key (`1`-`8`/`q`-`i`). |
+| [Feed it a simulated neighbour track](#5-simulate-the-neighbour-track-nfx--neighbour-machines-only) | Use the "Neighbour input" bay (NFX/neighbour machines only). |
+| [Keep a render for later / for an agent to read](#6-save-a-render-for-later-inspection-eg-by-an-agent) | Check SAVE RENDER before clicking RENDER & PLAY. |
+| [Edit a machine's source and hear it live](#7-edit-a-machines-own-source-and-hear-changes-immediately) | Just edit its `.asm56k`/`.json`, click RENDER again. |
+| [Get a real, installable `.syx`](#8-export-a-real-installable-syx) | Click EXPORT .SYX — slow (real certifier), be patient. |
+| [Script it, no browser](#9-script-against-the-cli-directly-bypassing-the-web-ui) | `./build/mds-harness render machine.mds --trig -o out.wav` |
 
 ## System requirements and assumptions
 
@@ -319,3 +334,10 @@ Known limitations:
 
 Next: live audio (PortAudio), if/when development needs real-time
 parameter tweaking rather than render-on-click.
+
+## Shout outs
+
+gearmulator for the 56300 emulator, kitbasher for toolchain stuff,
+waftlord and murdenihcam for input and inspiration, MDX20 developers
+for this entire experience, not to mention Elektron and Commodore and
+the giants on whose shoulders we aspire to stand.
