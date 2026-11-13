@@ -11,27 +11,28 @@ build→certify→flash→listen round trip.
 - **Windows with MinGW-w64**, currently. This has only been built and
   run on Windows; the CMake setup is MinGW-specific (forces the plain
   DSP56300 interpreter rather than the JIT, which crashes under this
-  toolchain — see "Building" below), and `tools/serve.py` hardcodes
-  MinGW's `bin` directory onto `PATH` for every subprocess it spawns
-  (`MINGW_BIN` in that file) rather than detecting it. Running this
-  anywhere else (Linux/macOS, or Windows with MSVC/clang instead of
-  MinGW) means updating that constant and re-verifying the CMake build
-  at minimum — not tested, may need more than that.
-- **Python 3**, stdlib only — no pip install needed for `tools/serve.py`
-  or any of the build-pipeline scripts it shells out to
-  (`mds_assemble.py`, `mds_pack.py`, `mds_to_syx.py`).
+  toolchain — see "Building" below). Running this anywhere else
+  (Linux/macOS, or Windows with MSVC/clang instead of MinGW) isn't
+  tested and would need real verification, not just a config tweak.
+- **MinGW is auto-detected, not hardcoded.** The first time
+  `tools/serve.py` runs, it checks (in order): a path saved from an
+  earlier run, `gcc`/`g++` already on `PATH` (the common case — nothing
+  to do), a handful of standard install locations, and only if none of
+  those hit, asks once in the terminal and remembers the answer. No
+  source edit needed to point it at your own install.
+- **Python 3**, stdlib only — no `pip install` needed for anything,
+  including the vendored build-pipeline scripts (below).
 - **CMake + Ninja**, and a C++17 compiler (MinGW g++, per the point above).
-- **A sibling checkout of [`dsp56300`](https://github.com/dsp56300/dsp56300)**
-  (GPLv3) — the real DSP56300 interpreter this tool drives. Expected at
-  `../dsp56300` relative to this repo by default; override with
-  `-DDSP56300_DIR=...` if it lives elsewhere.
-- **A specific sibling-directory layout for the source-build and `.syx`-export
-  features** (building a machine from its own `.asm56k`/`.json`, and the
-  EXPORT .SYX button): `mds-harness` must sit as a direct sibling of
-  `tools/` (for `mds_assemble.py`) and `mds-tools/` (for `mds_pack.py`,
-  `mds_to_syx.py`) under one common root. Rendering an already-built
-  `.mds` directly does **not** need this layout — only the build/export
-  pipeline does.
+- **Nothing else external.** This repo is fully self-contained: the
+  DSP56300 interpreter (`dsp56300`, upstream GPLv3), the assembler
+  (`asm56.exe` + its Python front end), the packager (`mds_pack.py`),
+  and the certifier (`mds-certifier.exe`) are all vendored into this
+  repo's own `vendor/` directory — no sibling checkouts of anything are
+  required to clone, build, or use this tool end to end (building a
+  machine from source and exporting a real `.syx` included). See
+  `CLAUDE.md`'s "Running this on a different computer" section for
+  exactly what's vendored and why, if you ever need to re-vendor from a
+  fresh upstream checkout.
 - **A modern browser** for the web UI (uses `fetch`, `Blob`/`URL.createObjectURL`,
   `<input type="file">`, CSS grid — nothing exotic, but no IE11-era
   fallback either).
@@ -39,27 +40,167 @@ build→certify→flash→listen round trip.
   needed — rendering is pure offline WAV synthesis; "playback" is just
   the browser's own `<audio>` element.
 
-## Quick start
+## Building (one-time setup)
+
+Fully self-contained — no sibling checkouts needed:
 
 ```sh
-# One-time build (needs a sibling dsp56300 checkout -- see "Building" below)
 cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
 cmake --build build --target mds-harness
+```
 
-# Every time you want to use it:
-cd /path/to/your/machines/project   # wherever your own .asm56k/.json files live
+`DSP56300_DIR` defaults to this repo's own `vendor/dsp56300/`; pass
+`-DDSP56300_DIR=/path/to/dsp56300` to build against a different (e.g.
+newer upstream) checkout instead. On Windows, put MinGW's `bin` on
+`PATH` first if this exact CMake invocation is run outside
+`tools/serve.py` (which auto-detects it — see "System requirements"
+above). The build forces the plain DSP56300 interpreter rather than the
+JIT (asmjit's x64 backend crashes under this toolchain — a call through
+the engine's own tiny call-stub ends up jumping to the stub's address as
+if it were native code, confirmed via a `gdb` backtrace). Not a problem
+for this tool (it's offline rendering, not live audio yet) — revisit
+only if a future milestone genuinely needs JIT speed.
+
+Once built, start the web UI (the normal way to use this day-to-day)
+from wherever your machines live:
+
+```sh
+cd /path/to/your/machines/project
 python /path/to/mds-harness/tools/serve.py
 ```
 
-That opens a browser tab with every machine found under your current
-directory (recursively) listed in a dropdown, real knobs for its
-parameters, a 16-step trig pattern, and a RENDER & PLAY button. Edit a
-`.asm56k`/`.json` source file, click RENDER again — no separate rebuild
-step, the server assembles+packs fresh on every click. See "Web UI"
-below for the full feature rundown (parameter locks, neighbour-input
-simulation, `.syx` export, saved renders with embedded metadata).
+That opens a browser tab at `127.0.0.1:8765` (pass `--no-open` to skip
+the auto-open, or `--machines-root <dir>` to point it somewhere other
+than the current directory). Everything below assumes the server is
+already running.
 
-## Why
+## What you can do with it, simple to advanced
+
+### 1. Listen to a machine that's already built
+
+The simplest case: pick a machine from the **MACHINE** dropdown (every
+`.mds` file found recursively under wherever you launched the server
+from gets listed), click **RENDER & PLAY**. The real `dsp56kEmu`
+interpreter runs the machine's actual INIT/TRIG/RENDER code and the
+result plays straight back in the browser's `<audio>` element.
+
+### 2. Explore a machine's sound by turning its knobs
+
+Every parameter the machine declares gets a real rotary knob — drag
+vertically, use arrow keys once focused, or type a value directly.
+Tick marks mark MIN/MID/MAX (or `−`/`+` for a bipolar parameter, where
+the middle position is zero rather than a minimum). **BARS** and
+**BPM** set the render length in musical terms rather than a raw block
+count. Click RENDER & PLAY again after any change — each render
+reflects the knobs exactly as they currently sit.
+
+### 3. Program a trig pattern (the sequencer)
+
+Below the knobs, a row of 16 step pads — the Machinedrum's real
+hardware layout (one row of 16, not a 4×4 grid). Click a pad to toggle
+whether that step fires a real `TRIG`, repeated across every bar in
+BARS. Every 4th pad's resting border is brighter, marking beat
+boundaries so the row reads as 4 groups of 4.
+
+### 4. Lock individual parameters to a specific step ("plocks")
+
+Each pad also shows a key label (`1`-`8`, then `q`-`i` for steps
+9-16). Dial up whatever knobs you want different for one hit, then
+press that step's key: it **plocks** — Elektron's own term for a
+per-step parameter lock — snapshotting every knob currently off its
+own default value into that step only. The *next* trig point (locked
+or not) decides each parameter fresh again, so a plock's effect never
+leaks past its own step. A knob off its default glows with a ring (it's
+exactly what the next plock keypress would capture); a step carrying at
+least one plock gets a small dot on its pad. **Double-tap** a step's
+key within ~400ms to clear that step's plocks without touching its
+on/off state.
+
+### 5. Simulate the neighbour track (NFX / neighbour machines only)
+
+A machine that reads "tracks back" (the Machinedrum's neighbour-input
+mechanism) gets an extra "Neighbour input" section: FAR (two tracks
+back) and NEAR (one track back) slots, each defaulting to a bundled WAV
+(`tools/assets/neighbour_{far,near}.wav` — three stacked tones,
+low→mid→high for far, reversed for near) with a file picker to
+override and a "use default" reset. Three-tracks-back is wired into
+the descriptor table so a machine reading it gets real silence rather
+than garbage, but has no WAV input of its own yet.
+
+### 6. Save a render for later inspection (e.g. by an agent)
+
+Renders are normally a tempfile — streamed to the browser, deleted
+right after. Check **SAVE RENDER** before clicking RENDER & PLAY to
+instead write it to a stable path, `renders/last_render.wav`
+(overwritten each time), so a dev or an agent reading the filesystem
+later always knows exactly where to look. Every render — saved or
+not — also embeds the exact parameters, trig pattern (with any
+plocks), BPM, and neighbour WAVs that produced it as a standard RIFF
+`LIST/INFO/ICMT` comment chunk, so the file alone answers "what made
+this sound the way it does?" without a separate sidecar. See
+`CLAUDE.md` for a short script that reads it back out.
+
+### 7. Edit a machine's own source and hear changes immediately
+
+This is where the dev loop actually speeds up. Any machine folder
+under the machines root with a matching `<PREFIX>.asm56k` +
+`<PREFIX>.json` pair (same naming convention as `Machines/build.py`,
+searched recursively — e.g. `NFX-BO/NFXBO.asm56k`, or
+`Shelved/SYN-PX/SYNPX.asm56k`) gets listed by its folder name and
+rebuilt fresh — assemble, then pack (bundling `<PREFIX>_icon.pbm` if
+one exists) — on *every* params/render request, using the same first
+two steps as `Machines/build.py` (skipping `--certify` and the final
+`.syx` sysex-encode for speed; this is a dev-iteration build, not the
+official release pipeline). Edit the `.asm56k`/`.json`/icon directly in
+your own editor, click RENDER in the browser, hear the result — no
+manual rebuild step, no stale cache, and a build/assemble error
+surfaces as a normal error message in the UI instead of a silent
+failure. Folders with no source pair of their own (e.g. `refs/`
+machines extracted from a real firmware dump) still work exactly as
+before, used directly from their existing `.mds`.
+
+### 8. Export a real, installable `.syx`
+
+The most advanced, slowest action: **EXPORT .SYX** runs the *full*
+toolchain — assemble, pack **with `--certify`**, sysex-encode — not
+the fast draft build used for render previews, because a package needs
+a real certified cycle budget before it can be installed on hardware.
+**This is slow** (the real certifier's worst-case cycle search took
+13+ minutes on one small machine under concurrent load) — expect it to
+take a while, especially if other heavy work is running at the same
+time. The knob values sitting in the UI right now become the exported
+machine's own defaults (a throwaway copy of its `.json` manifest; the
+real one on disk is never touched). Installs to slot 1 by default —
+change the destination slot later at install time, it's not worth a
+dedicated control here.
+
+### 9. Script against the CLI directly, bypassing the web UI
+
+For automation or batch rendering without a browser:
+
+```sh
+./build/mds-harness render machine.mds --list-params
+./build/mds-harness render machine.mds --list-params-json   # for scripting -- see tools/serve.py
+./build/mds-harness render machine.mds --trig --blocks 200 --param BASE=100 -o out.wav
+./build/mds-harness render machine.mds --trig-at "0:NBAL=0" --trig-at "500:NBAL=127" --blocks 1000 -o out.wav
+./build/mds-harness render machine.mds --trig --blocks 200 \
+    --neighbour-far tools/assets/neighbour_far.wav \
+    --neighbour-near tools/assets/neighbour_near.wav \
+    -o out.wav
+```
+
+`--trig-at BLOCK[:NAME=VAL,...]` is the same sequencer/plock mechanism
+the web UI's step grid drives — repeatable, one per trig point.
+`--neighbour-far`/`--neighbour-near` feed a neighbour/NFX machine's
+"tracks back" input from a 16-bit PCM WAV (looping if shorter than the
+render); omit either and that signal is silence. The server
+(`tools/serve.py`) itself is stdlib-only Python — no Flask, no build
+step for the front end (`tools/web/`) — so reading it is a reasonable
+way to see exactly how the UI maps onto these same CLI flags.
+
+## Background
+
+### Why
 
 Building a custom USR machine today means editing assembly, running the
 full certification pipeline, flashing a `.syx` to real hardware (or an
@@ -68,13 +209,13 @@ synthesis-related. This project exists to shortcut that loop for
 development: load a machine, poke its parameters, hear the result,
 immediately.
 
-## Plan (thin slices, in order)
+### Plan (thin slices, in order)
 
 1. **WAV-dump CLI** — load a `.mds`, set fixed parameter values, trigger
    once, render N blocks, write a `.wav` file. No live audio yet. ✅ done.
 2. **Hot-reload parameters** — originally planned as "watch a JSON/text
    file for parameter changes, re-render." Superseded by something more
-   useful: a local web UI (below) that renders on demand with real knob
+   useful: a local web UI that renders on demand with real knob
    widgets and plays the result straight back in the browser — no file
    watching, no manual WAV-dragging. ✅ done, exceeds the original scope.
 3. **Live audio** — drive the engine via [PortAudio](https://www.portaudio.com/)
@@ -85,7 +226,7 @@ immediately.
    engine into an `AudioProcessor`, swapping the audio-driver layer only.
    Not started.
 
-## Architecture
+### Architecture
 
 A `MachineEngine` (loads program + Y-memory workspace into `dsp56kEmu`,
 exposes `trigger()` / `setParam(slot, value)` / `renderBlock(float* out)`)
@@ -95,149 +236,39 @@ should never know or care who's calling it.
 
 ## License / dependencies
 
-Depends on [`dsp56300`](https://github.com/dsp56300/dsp56300) (GPLv3) for
-the actual DSP56300 interpreter. Deliberately does **not** depend on
-`mds-tools` (no explicit upstream license) — parameter-transform formulas
-(`bipolar_q23`, `unipolar_q23`, `pitch`, etc.) are reimplemented directly
-from the public MDS spec (jmamma/MDS,
-`docs/MDX_MachineDumpStandard.txt`) rather than linked from that repo's
-own code, to keep this project's own licensing unambiguous if it's ever
-shared.
+Vendored, not linked-against-a-sibling: [`dsp56300`](https://github.com/dsp56300/dsp56300)
+(GPLv3) — the actual DSP56300 interpreter — lives at `vendor/dsp56300/`
+in this repo, trimmed to the subset actually needed to build (not the
+full upstream checkout's GUI debugger/plugin-wrapper/profiler-SDK
+tooling this project never touches). Vendoring GPLv3 source directly
+into a GPLv3 project (see `LICENSE`) is a normal way to satisfy that
+license, not a new licensing question.
+
+`vendor/assembler/` (the DSP56300 instruction encoder) and
+`vendor/mds-tools/` (the `.mds` packager and certifier) are vendored
+copies of this same author's own tooling from elsewhere in the broader
+Machinedrum project — same copyright holder throughout, which is why
+vendoring them here doesn't raise a separate licensing question either.
+Parameter-transform formulas (`bipolar_q23`, `unipolar_q23`, `pitch`,
+etc.) in this project's own C++ engine are still reimplemented directly
+from the public MDS spec rather than copied from the vendored packager's
+own internals, for clarity of what this engine independently verifies
+versus what it just reuses.
 
 Source of truth for the MDS/MDX format itself:
 [github.com/jmamma/MDX](https://github.com/jmamma/MDX) and
 [github.com/jmamma/MDS](https://github.com/jmamma/MDS), by Justin
 Mammarella.
 
-## Building
-
-Needs a sibling checkout of [`dsp56300`](https://github.com/dsp56300/dsp56300)
-(see `../dsp56300` relative to this repo, or pass `-DDSP56300_DIR=...`).
-
-```sh
-cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
-cmake --build build --target mds-harness
-```
-
-On Windows with MinGW, put MinGW's `bin` on `PATH` first (same requirement
-as this project's sibling tools). The build forces the plain DSP56300
-interpreter rather than the JIT (asmjit's x64 backend crashes under this
-toolchain — a call through the engine's own tiny call-stub ends up jumping
-to the stub's address as if it were native code, confirmed via a `gdb`
-backtrace). Not a problem for this tool (it's offline rendering, not live
-audio yet) — revisit only if a future milestone genuinely needs JIT speed.
-
-## Usage
-
-### CLI
-
-```sh
-./build/mds-harness render machine.mds --list-params
-./build/mds-harness render machine.mds --list-params-json   # for scripting -- see tools/serve.py
-./build/mds-harness render machine.mds --trig --blocks 200 --param BASE=100 -o out.wav
-./build/mds-harness render machine.mds --trig --blocks 200 \
-    --neighbour-far tools/assets/neighbour_far.wav \
-    --neighbour-near tools/assets/neighbour_near.wav \
-    -o out.wav
-```
-
-`--neighbour-far`/`--neighbour-near` feed a neighbour/NFX machine's
-"tracks back" input from a 16-bit PCM WAV (looping if shorter than the
-render); omit either and that signal is silence, same as before this
-feature existed. Only one-track-back ("near") and two-tracks-back
-("far") are simulated — three-tracks-back is wired into the descriptor
-table so a machine reading it gets real silence rather than garbage, but
-has no WAV input of its own yet.
-
-### Web UI (the normal way to use this day-to-day)
-
-```sh
-cd /path/to/your/machines/project   # wherever your own .asm56k/.json files live
-python /path/to/mds-harness/tools/serve.py
-```
-
-Starts a local dev server (`127.0.0.1:8765` by default) and opens a
-browser tab automatically (pass `--no-open` to skip that). **It scans
-wherever you ran it FROM** (the shell's current directory, recursively)
-for machines — not a path baked into this repo — so this works from any
-project on disk; it doesn't need to sit next to `USR-Machines/`. Pass
-`--machines-root <dir>` to point it somewhere else without `cd`-ing
-there first. The page: lists every machine found that way in a
-dropdown; renders real rotary knobs for each of a machine's declared
-parameters (tick marks at min/mid/max, `−`/`+` labels for bipolar
-params, `MIN`/`MAX` for everything else); a BARS/BPM transport instead
-of a raw block count; and, for neighbour/NFX machines only, a "Neighbour
-input" bay with FAR (two tracks back) and NEAR (one track back) slots,
-each defaulting to a bundled WAV (`tools/assets/neighbour_{far,near}.wav`
-— three stacked tones, low→mid→high for far, reversed for near) with a
-file picker to override and a "use default" reset. Clicking RENDER &
-PLAY shells out to the real `mds-harness.exe` and plays the resulting
-WAV straight back in an `<audio>` element.
-
-### Sequencer and parameter locks ("plocks")
-
-A row of 16 step pads below the knobs — the Machinedrum's real hardware
-layout (one row of 16, not a 4×4 grid). Click a pad to toggle whether
-that step fires a real TRIG, repeated across every bar in BARS.
-
-Each pad also shows a small key label (`1`-`8`, then `q`-`i` for steps
-9-16). Pressing that key **plocks** the step — Elektron's term for a
-per-step parameter lock — snapshotting every knob that's currently off
-its own default value into that step only; the next trig point (locked
-or not) decides each parameter fresh again, so a plock's effect never
-leaks past its own step. A knob currently off its default gets a glowing
-ring (it's exactly what the next plock keypress would capture); a step
-carrying at least one plock gets a small dot on its pad. **Double-tap**
-a step's key within the same ~400ms to clear that step's plocks without
-touching its on/off state.
-
-### Saving a render + inspecting its metadata
-
-Renders are normally a tempfile — streamed to the browser, deleted
-right after. Checking "SAVE RENDER" before clicking RENDER & PLAY
-instead writes it to a stable path, `renders/last_render.wav`
-(overwritten each time), so a dev or an agent reading the filesystem
-later always knows exactly where to look. Every render — saved or not —
-also embeds the exact parameters, trig pattern (with any plocks), BPM,
-and neighbour WAVs that produced it as a standard RIFF `LIST/INFO/ICMT`
-comment chunk, so the file alone answers "what made this sound the way
-it does?" without a separate sidecar. See `CLAUDE.md` for a short script
-that reads it back out.
-
-### Exporting a real `.syx`
-
-The EXPORT .SYX button runs the *full* toolchain — assemble, pack
-**with `--certify`**, sysex-encode — not the fast draft build used for
-render previews, because a package needs a real certified cycle budget
-before it can be installed on hardware. **This is slow** (the real
-certifier's worst-case cycle search took 13+ minutes on one small
-machine under concurrent load) — expect it to take a while, especially
-if other heavy work is running at the same time. The current knob
-values become the exported machine's own defaults (a throwaway copy of
-its `.json` manifest; the real one on disk is never touched). Pick the
-destination SLOT (1-16) next to the button first.
-
-**Builds from source, not just from a pre-built `.mds`.** Any machine
-folder under the machines root that has a matching
-`<PREFIX>.asm56k` + `<PREFIX>.json` pair (same naming convention as
-`Machines/build.py`, searched recursively — e.g. `NFX-BO/NFXBO.asm56k`,
-or `Shelved/SYN-PX/SYNPX.asm56k`) gets listed by its folder name and
-rebuilt fresh — assemble, then pack (bundling `<PREFIX>_icon.pbm` if one
-exists) — on *every* params/render request, using the same first two
-steps as `Machines/build.py` (skipping `--certify` and the final `.syx`
-sysex-encode for speed; this is a dev-iteration build, not the official
-release pipeline). So a dev (or an agent) can edit a `.asm56k`/`.json`/
-icon directly, hit RENDER, and hear the result immediately — no manual
-rebuild step, no stale cache, and a build/assemble error surfaces as a
-normal error message in the UI instead of a silent failure. Folders
-with no source pair of their own (e.g. `refs/` machines extracted from
-a real firmware dump) still work exactly as before, used directly from
-their existing `.mds`.
-
-The server (`tools/serve.py`) is stdlib-only Python — no Flask, no
-build step for the front end (`tools/web/`).
-
 ## Status
+
+**Fully self-contained, no sibling checkouts** (2026-11-13) — `dsp56300`,
+the assembler, the packager, and the certifier are all vendored into
+this repo's own `vendor/` directory; `MINGW_BIN` is auto-detected
+instead of hardcoded. Verified with a from-scratch build pointed only
+at `vendor/dsp56300` (no sibling `dsp56300` checkout present) and real
+renders of `SYN-RB` and `NFX-BO` producing correct, non-silent output
+afterward.
 
 **Builds from source on every render** (2026-11-13) — the web UI no
 longer requires a pre-built `.mds`; it assembles+packs a machine's own
@@ -279,6 +310,9 @@ Known limitations:
   `SYN-PX`, `NFX-BO`, ...) aren't affected — they emit real relocatable
   imports this engine resolves correctly. Deprioritized; not planned
   work right now.
+- The sequencer currently authors one flat 16-step pattern repeated
+  identically across every bar in BARS — distinct per-bar patterns (up
+  to 4) have been requested but aren't built yet.
 
 Next: live audio (PortAudio), if/when development needs real-time
 parameter tweaking rather than render-on-click.
